@@ -1,0 +1,187 @@
+---
+title: "Project"
+author: "Group 1"
+date: "November 30, 2019"
+output: pdf_document
+---
+```{r include=FALSE}
+library(testequavar)
+```
+# Introduction
+The data used in this report was collected from the Harvard Dataverse in an experiment about smokers and non-smokers, and how their social networks differ. The experiement looks into the differences in the participants' family, friend, group, and photo networks within Facebook. Among the metrics used in this experiement is "vertices", a measure of the number of people in a participant's network.  Our experiement will test wether smoking has a significant influence over the number of vertices in a participant's Facebook network. And will focus solely on the data collected from underage smokers within the US that are 18 years and below. We will refer to the participants in our experiment as "teenagers".
+
+# Problem
+H0: The average number of vertices for a teenage smokers within the US is not significantly different than a non-smoker's.
+HA: HA !=H0
+Alpha = .05
+
+# Purpose
+The purpose of this experiment is to test the significance of tobacco's influence, if any, on teenagers and their network of friends. We do so in support of, and to better inform, youth tobacco prevention.
+
+# Results and Discussion
+```{r echo = FALSE}
+
+Dat <- read.csv("fbr_friends.csv")                      # Read in Raw Data
+US <- subset(Dat, country == 'us')                      # US subset
+Dat18 <-subset(US, yearsOld <= 18)
+nosmoke=Dat18[Dat18$is_smoker==0, ]$vertices
+smoke=Dat18[Dat18$is_smoker==1, ]$vertices
+
+par(mfrow=c(2,2))
+hist(smoke, main = "Smokers", freq = F)
+lines(density(smoke), col = "red")
+qqnorm(smoke, main = "Smokers Q-Qplot")
+qqline(smoke)
+
+hist(nosmoke, main = "Non-smokers", freq = F)
+lines(density(nosmoke), col = "red")
+qqnorm(nosmoke, main = "Non-Smokers Q-Qplot")
+qqline(nosmoke)
+
+equa2vartest(smoke, nosmoke, .05, 10000)
+
+shapiro.test(smoke)
+shapiro.test(nosmoke)
+```
+Both histograms are not at all symmetric and the Q-Q plots are greatly skewed, suggesting the data is not normally distributed. Thus, in order to test whether there is a significant difference between the two, we need to bootstrap.  The W statistic of both 'smoke' and 'nosmoke' from the Shapiro-Wilk test is significant at a 5% significance level since we have .86 and .70 with p values of 6.112e-11 and 1.521e-13 respectively. Thus with basically no evidence for normality, we must reject the hypothesis that their distributions are normal.  Equarvartest shows both groups have equal variances. This makes a comparison of their variances an option since both plots are skewed. But since, they are both skewed to the right, we choose instead to analyze their difference in means. We will refer to our chosen statistic as DoM from here on.
+```{r echo = FALSE, fig1, fig.width = 5, fig.asp = .62, fig.align = "center"}
+par(mfrow=c(1,2))
+boxplot(smoke, nosmoke, varwidth = TRUE, notch = TRUE, names = c("smoke", "nosmoke"), main = "Boxplot")
+```
+Since we have decided to focus on the DoM, we take a quick look at a visul representation of both means. The boxplot suggests means are different since there looks to be a significant drop from the smoke to nosmoke mean. We can see also that the medians are different because the notches of both boxplots do not overlap. Finally the boxplot is a reminder of the previously unaddressed but important fact that the smoke and nosmoke sets have unequal sizes.
+```{r echo = FALSE, fig2, fig.width = 5, fig.asp = .62}
+#{r echo = FALSE}
+
+test_smoke <- mean(smoke)
+test_no_smoke <- mean(nosmoke)
+
+observed <- test_smoke - test_no_smoke
+
+n <- length(smoke)
+m <- length(nosmoke)
+
+N <- 10^4
+TestMean <- numeric(N)
+
+for (i in 1:N)
+{
+  sample_Smoke <- sample(smoke, n, replace = TRUE)
+  sample_No_Smoke <- sample(nosmoke, m, replace = TRUE)
+  TestMean[i] <- mean(sample_Smoke) - mean(sample_No_Smoke)
+}
+
+par(mfrow=c(1,2))
+hist(TestMean, main = "DoM Bootstrap", xlab="Means", freq = F)
+lines(density(TestMean), col = "red")
+abline(v = observed , col = "blue", lty = 2)
+qqnorm(TestMean, main = "DoM QQ-PLot")  
+qqline(TestMean)
+
+print('Smokers have this many vertices on average:')
+test_smoke
+print('Non-Smokers have on average, this many vertices:')
+test_no_smoke
+print("The observed difference:")
+observed
+print('The Bootstrap Mean difference:')
+mean(TestMean)
+print('Bootstrap STD')
+sd(TestMean)
+print('Bootstrap bias')
+mean(TestMean)- observed
+
+#Calculating the 95% Confidence interval
+quantile(TestMean, c(0.025, 0.975))
+
+pval <- (sum(TestMean <= observed) +1)/(N+1)
+pval
+```
+Note that the histogram is almost symmetric and tapers off with thin tails on both sides. The normal qq-plot also suggests normality of the bootstrap statistic. The observed DoM seems to be in the center of the distribution. The 95% Confidence Interval for the difference in means doesn’t contain zero. And our interval, (4.560679, 155.463505), suggests that there is a SIGNIFICANT difference in the mean vertices between teenage smoker and non-smoker networks.  However, with a p value of .49, we fail to reject the null at a 5% significance level suggesting no significant DoM.  And so the bootstrap gives conflicting results. 
+```{r echo = FALSE}
+quantile(TestMean, c(0.05, 0.95))
+```
+We try to correct this by modifying alpha, but changing alpha to .1 does not change the discrepancy in the results, it only trims the CI (17.93173, 144.96056).
+
+Next we perform a permutation test to see whether the difference is significant.
+```{r echo = FALSE, fig3, fig.width = 5, fig.asp = .62, fig.align = "center"}
+#{r echo = FALSE}
+
+n <- length(smoke)
+m <- length(nosmoke)
+
+result <- numeric(N)
+alp <- 0.05
+
+for (i in 1:N)
+{
+  index <- sample(n, m, replace = FALSE) 
+  result[i] <- mean(smoke[index]) - mean(nosmoke[-index])
+}
+par(mfrow=c(1,2))
+hist(result, freq = F)
+lines(density(result), col = "red")
+abline(v = observed, col = "blue")
+
+pval <- (sum(result <= observed) +1)/(N+1)
+pval
+```
+Once again, the histogram is almost symmetric and tapers off with thin tails on both sides. Once again, with a p value of .48, we fail to reject the null at a 5% significance level suggesting no significant DoM.
+```{r echo = FALSE}
+pval < alp
+# Therefore, with 5% significance, we will reject the null hypothese in favor the alternative
+```
+At this point of the test, it appears that we should claim no significant DoM.  We perform a bootstrap T test to construct another CI.
+```{r echo = FALSE}
+#{r echo = FALSE}
+N <- 10^4
+
+xbar <- mean(smoke)
+xbar1 <- mean(nosmoke)
+thetahat <- xbar - xbar1
+
+n <- length(smoke)
+m <- length(nosmoke)
+
+SE <- sqrt(var(smoke)/n + var(nosmoke)/m)
+
+Tstar <- numeric(N)
+for (i in 1:N) 
+{
+ bootx <- sample(smoke, n, replace = TRUE)
+ booty <- sample(smoke, m, replace = TRUE)
+ Tstar[i] <- (mean(bootx) - mean(booty) - thetahat) /
+               sqrt(var(bootx)/n + var(booty)/m)
+}
+
+par(mfrow=c(2,2))
+hist(Tstar, main = "Bootstrap T: Difference of Means", freq = F)
+lines(density(Tstar), col = "red")
+qqnorm(Tstar, main = "Bootstrap T: DoM Q-Qplot")
+qqline(Tstar)
+
+thetahat - quantile(Tstar, c(.975, .025)) * SE
+
+```
+This CI (90.79513 238.49807) is even more outrageous compared to our previous analysis suggesting significant DoM.  We need to check the power of the test to determine if we are right to reject the null hypothesis. This could provide more suport one way or another.
+```{r echo = FALSE}
+
+decision = numeric(0)
+N=10^4
+
+alp= 0.05 #alpha
+
+for(i in 1:N){
+dat = smoke
+dat1 = nosmoke
+ decision[i]  = t.test(smoke, nosmoke, mu=1,  alternative="two.sided")$p.value
+}
+
+sum(ifelse(decision <= alp,1,0))/N
+```
+To test the power, we simulated the percentage of times we correctly reject the null hypothesis when the null is false. We ensured this false null by setting the difference in means to distinctly different numbers, 1:6. When we set the difference >= 6, we get a power of 0, thus incorrectly rejecting the null hypothesis 100% of the time. When the difference is <= 5, we get  a power of 100, thus correctly rejecting the null hypothesis 100% of the time.  The lack of middle ground in the power test does however raise a red flag and lead us to question its validity.
+
+# Conclusion
+We failed to reject the null hypothesis, which means that tobacco has no significant influence on teenagers and their network of friends. Thus we can tentatively conclude that smoking has no impact on teenage facebook networks.  Future work should take into account the unequal size of the samples, consider other metrics, like transitivity and edges, from this dataset and look into a time series model of the data.
+
+# References:
+https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/XMPAUQ
